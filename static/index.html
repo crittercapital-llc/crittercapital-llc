@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Goggins">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Goggins — Your Coach</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <div id="header">
+      <div>
+        <h1>GOGGINS</h1>
+        <div class="subtitle">Your Personal Coach</div>
+      </div>
+    </div>
+
+    <!-- Screens -->
+    <div id="screens">
+
+      <!-- Today -->
+      <div id="screen-today" class="screen active">
+        <div class="loading">Loading...</div>
+      </div>
+
+      <!-- Plan -->
+      <div id="screen-plan" class="screen">
+        <div class="loading">Loading plan...</div>
+      </div>
+
+      <!-- Chat -->
+      <div id="screen-chat" class="screen">
+        <div id="chat-messages"></div>
+        <div id="chat-input-bar">
+          <textarea
+            id="chat-input"
+            placeholder="Talk to Goggins..."
+            rows="1"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="true"
+          ></textarea>
+          <button id="chat-send" aria-label="Send">&#9650;</button>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div id="screen-settings" class="screen">
+        <div class="loading">Loading settings...</div>
+      </div>
+
+    </div>
+
+    <!-- Tab Bar -->
+    <nav id="tab-bar">
+      <button class="tab-btn active" data-tab="today">
+        <span class="icon">⚡</span>
+        Today
+      </button>
+      <button class="tab-btn" data-tab="plan">
+        <span class="icon">📋</span>
+        Plan
+      </button>
+      <button class="tab-btn" data-tab="chat">
+        <span class="icon">💬</span>
+        Chat
+      </button>
+      <button class="tab-btn" data-tab="settings">
+        <span class="icon">⚙️</span>
+        Settings
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

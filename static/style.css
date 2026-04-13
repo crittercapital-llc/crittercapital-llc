@@ -1,0 +1,552 @@
+/* ── Reset & Base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --bg2: #141414;
+  --bg3: #1e1e1e;
+  --border: #2a2a2a;
+  --text: #f0f0f0;
+  --text2: #999;
+  --accent: #e8ff00;      /* Goggins yellow-green */
+  --accent-dim: #b8cc00;
+  --red: #ff4444;
+  --green: #44ff88;
+  --orange: #ff8c00;
+  --blue: #4488ff;
+  --radius: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── App Shell ─────────────────────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+#header {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 10px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+#header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+#header .subtitle {
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ── Tab Bar ───────────────────────────────────────────────────────────────── */
+#tab-bar {
+  display: flex;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 10px;
+  font-family: var(--font);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s;
+  gap: 4px;
+}
+
+.tab-btn .icon { font-size: 22px; line-height: 1; }
+
+.tab-btn.active {
+  color: var(--accent);
+}
+
+/* ── Screens ───────────────────────────────────────────────────────────────── */
+#screens {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: none;
+}
+
+.screen.active { display: block; }
+
+/* ── Cards ─────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+
+/* ── Recovery Card ─────────────────────────────────────────────────────────── */
+#recovery-card .recovery-score {
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.score-green  { color: var(--green); }
+.score-yellow { color: var(--accent); }
+.score-orange { color: var(--orange); }
+.score-red    { color: var(--red); }
+
+.recovery-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stat-box {
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
+.stat-lbl { font-size: 10px; color: var(--text2); margin-top: 2px; letter-spacing: 0.5px; }
+
+/* ── Today's Workout Card ──────────────────────────────────────────────────── */
+#today-workout-card .workout-intensity {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.intensity-rest     { background: #2a2a2a; color: var(--text2); }
+.intensity-easy     { background: #1a3a1a; color: var(--green); }
+.intensity-moderate { background: #2a2a00; color: var(--accent); }
+.intensity-hard     { background: #2a1a00; color: var(--orange); }
+.intensity-peak     { background: #2a0000; color: var(--red); }
+
+.workout-description {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.workout-meta {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 12px;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  border: none;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.btn:active { transform: scale(0.97); opacity: 0.8; }
+
+.btn-primary   { background: var(--accent); color: #000; width: 100%; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); width: 100%; }
+.btn-danger    { background: #2a0000; color: var(--red); border: 1px solid #4a0000; width: 100%; }
+.btn-sm        { padding: 8px 14px; font-size: 13px; width: auto; }
+
+/* ── Chat Screen ───────────────────────────────────────────────────────────── */
+#screen-chat {
+  display: none;
+  flex-direction: column;
+  padding: 0;
+}
+
+#screen-chat.active {
+  display: flex;
+}
+
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-user {
+  background: var(--accent);
+  color: #000;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  font-weight: 500;
+}
+
+.msg-agent {
+  background: var(--bg3);
+  color: var(--text);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.msg-agent strong { color: var(--accent); }
+.msg-agent em     { color: var(--text2); font-style: normal; }
+
+.msg-typing {
+  background: var(--bg3);
+  color: var(--text2);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--border);
+  font-style: italic;
+}
+
+#chat-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+#chat-input {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 10px 16px;
+  resize: none;
+  max-height: 120px;
+  min-height: 44px;
+  outline: none;
+  line-height: 1.4;
+}
+
+#chat-input:focus { border-color: var(--accent); }
+
+#chat-send {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+#chat-send:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Plan Screen ───────────────────────────────────────────────────────────── */
+.week-header {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin: 16px 0 8px;
+}
+
+.week-header:first-child { margin-top: 0; }
+
+.plan-day {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plan-day.completed { opacity: 0.5; }
+.plan-day.today { border-color: var(--accent); }
+
+.plan-day-date {
+  font-size: 11px;
+  color: var(--text2);
+  min-width: 36px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.plan-day-date .day-name { font-weight: 700; color: var(--text); font-size: 13px; }
+
+.plan-day-body { flex: 1; }
+.plan-day-desc { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+.plan-day-meta { font-size: 12px; color: var(--text2); }
+
+.plan-day-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Settings Screen ───────────────────────────────────────────────────────── */
+.settings-section { margin-bottom: 24px; }
+
+.settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.connect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+
+.connect-name { font-weight: 600; }
+.connect-status { font-size: 12px; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.status-connected .status-dot    { background: var(--green); }
+.status-disconnected .status-dot { background: var(--red); }
+
+input[type="text"], input[type="number"], textarea, select {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+  margin-bottom: 10px;
+}
+
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+
+select option { background: var(--bg3); }
+
+label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+
+/* ── Loading / Empty States ────────────────────────────────────────────────── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  color: var(--text2);
+  font-style: italic;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text2);
+}
+
+.empty-state .big-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 15px; line-height: 1.6; }
+
+/* ── Toast ─────────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 10px 20px;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Markdown-ish rendering in chat ────────────────────────────────────────── */
+.msg-agent ul { padding-left: 18px; margin: 4px 0; }
+.msg-agent li { margin-bottom: 4px; }
+
+/* ── Pre-workout check-in card ─────────────────────────────────────────────── */
+.checkin-hint {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 12px;
+}
+
+.checkin-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.checkin-field {
+  flex: 1;
+}
+
+.checkin-field label {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+
+.checkin-response {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.checkin-response strong { color: var(--accent); }
+.checkin-response ul { padding-left: 18px; margin: 6px 0; }
+.checkin-response li { margin-bottom: 4px; }
+
+/* ── Exercise rows ─────────────────────────────────────────────────────────── */
+#exercises-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.exercise-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.exercise-row input {
+  margin-bottom: 0;
+  padding: 10px 10px;
+  font-size: 14px;
+}
+
+/* ── Settings textarea ─────────────────────────────────────────────────────── */
+textarea {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+  margin-bottom: 10px;
+  resize: none;
+  line-height: 1.5;
+}
+
+textarea:focus { border-color: var(--accent); }
+
+/* ── Log form ──────────────────────────────────────────────────────────────── */
+#log-form-card textarea {
+  min-height: 80px;
+}
