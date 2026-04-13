@@ -2,7 +2,7 @@ import sqlite3
 import json
 import time
 import os
-from pathlib import Path
+from datetime import date, timedelta
 
 DB_PATH = os.getenv("DB_PATH", "./fitness_agent.db")
 
@@ -16,23 +16,14 @@ def get_conn() -> sqlite3.Connection:
 def init_db():
     with get_conn() as conn:
         conn.executescript("""
-            CREATE TABLE IF NOT EXISTS tokens (
-                provider TEXT PRIMARY KEY,
-                access_token TEXT NOT NULL,
-                refresh_token TEXT,
-                expires_at INTEGER,
-                scope TEXT,
-                updated_at INTEGER
-            );
-
             CREATE TABLE IF NOT EXISTS user_profile (
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 goals TEXT,
+                current_fitness TEXT,
                 timeline_weeks INTEGER,
                 restrictions TEXT,
                 preferred_sports TEXT,
                 days_per_week INTEGER,
-                fitness_level TEXT,
                 created_at INTEGER,
                 updated_at INTEGER
             );
@@ -54,70 +45,17 @@ def init_db():
             CREATE TABLE IF NOT EXISTS workout_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
+                recovery_score INTEGER,
+                pre_workout_notes TEXT,
                 user_recap TEXT,
-                strava_activity_id TEXT,
+                exercises TEXT,
                 perceived_effort INTEGER,
-                pain_notes TEXT,
+                post_notes TEXT,
                 claude_feedback TEXT,
                 plan_adjustments TEXT,
                 created_at INTEGER
             );
-
-            CREATE TABLE IF NOT EXISTS pkce_state (
-                state TEXT PRIMARY KEY,
-                code_verifier TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                created_at INTEGER
-            );
         """)
-
-
-# ── Token helpers ──────────────────────────────────────────────────────────────
-
-def save_token(provider: str, access_token: str, refresh_token: str | None,
-               expires_in: int | None, scope: str | None):
-    expires_at = int(time.time()) + (expires_in or 3600)
-    with get_conn() as conn:
-        conn.execute("""
-            INSERT INTO tokens (provider, access_token, refresh_token, expires_at, scope, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(provider) DO UPDATE SET
-                access_token=excluded.access_token,
-                refresh_token=excluded.refresh_token,
-                expires_at=excluded.expires_at,
-                scope=excluded.scope,
-                updated_at=excluded.updated_at
-        """, (provider, access_token, refresh_token, expires_at, scope, int(time.time())))
-
-
-def get_token(provider: str) -> dict | None:
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM tokens WHERE provider = ?", (provider,)).fetchone()
-        return dict(row) if row else None
-
-
-def is_authenticated(provider: str) -> bool:
-    token = get_token(provider)
-    return token is not None and token.get("access_token") is not None
-
-
-# ── PKCE state helpers ─────────────────────────────────────────────────────────
-
-def save_pkce_state(state: str, code_verifier: str, provider: str):
-    with get_conn() as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO pkce_state (state, code_verifier, provider, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (state, code_verifier, provider, int(time.time())))
-
-
-def pop_pkce_state(state: str) -> dict | None:
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM pkce_state WHERE state = ?", (state,)).fetchone()
-        if row:
-            conn.execute("DELETE FROM pkce_state WHERE state = ?", (state,))
-            return dict(row)
-        return None
 
 
 # ── Profile helpers ────────────────────────────────────────────────────────────
@@ -136,25 +74,26 @@ def get_profile() -> dict | None:
         return d
 
 
-def save_profile(goals: str, timeline_weeks: int, restrictions: str,
-                 preferred_sports: list, days_per_week: int, fitness_level: str):
+def save_profile(goals: str, current_fitness: str, timeline_weeks: int,
+                 restrictions: str, preferred_sports: list, days_per_week: int):
     now = int(time.time())
     sports_json = json.dumps(preferred_sports)
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO user_profile (id, goals, timeline_weeks, restrictions, preferred_sports,
-                                      days_per_week, fitness_level, created_at, updated_at)
+            INSERT INTO user_profile
+                (id, goals, current_fitness, timeline_weeks, restrictions,
+                 preferred_sports, days_per_week, created_at, updated_at)
             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 goals=excluded.goals,
+                current_fitness=excluded.current_fitness,
                 timeline_weeks=excluded.timeline_weeks,
                 restrictions=excluded.restrictions,
                 preferred_sports=excluded.preferred_sports,
                 days_per_week=excluded.days_per_week,
-                fitness_level=excluded.fitness_level,
                 updated_at=excluded.updated_at
-        """, (goals, timeline_weeks, restrictions, sports_json,
-              days_per_week, fitness_level, now, now))
+        """, (goals, current_fitness, timeline_weeks, restrictions,
+              sports_json, days_per_week, now, now))
 
 
 # ── Training plan helpers ──────────────────────────────────────────────────────
@@ -191,7 +130,6 @@ def get_plan(week_number: int | None = None) -> list[dict]:
 
 
 def get_todays_plan_entry() -> dict | None:
-    from datetime import date
     today = date.today().isoformat()
     with get_conn() as conn:
         row = conn.execute(
@@ -201,7 +139,6 @@ def get_todays_plan_entry() -> dict | None:
 
 
 def update_plan_entries(adjustments: list[dict]):
-    """Each adjustment: { date: str, description: str, intensity: str, ... }"""
     with get_conn() as conn:
         for adj in adjustments:
             sets = []
@@ -228,28 +165,40 @@ def mark_plan_entry_complete(date_str: str):
 
 # ── Workout log helpers ────────────────────────────────────────────────────────
 
-def save_workout_log(date_str: str, user_recap: str, perceived_effort: int | None,
-                     pain_notes: str | None, strava_activity_id: str | None,
-                     claude_feedback: str | None, plan_adjustments: list | None) -> int:
+def save_workout_log(date_str: str, recovery_score: int | None,
+                     pre_workout_notes: str | None, user_recap: str | None,
+                     exercises: list | None, perceived_effort: int | None,
+                     post_notes: str | None, claude_feedback: str | None,
+                     plan_adjustments: list | None) -> int:
     now = int(time.time())
+    exercises_json = json.dumps(exercises) if exercises else None
     adj_json = json.dumps(plan_adjustments) if plan_adjustments else None
     with get_conn() as conn:
         cursor = conn.execute("""
             INSERT INTO workout_log
-                (date, user_recap, strava_activity_id, perceived_effort,
-                 pain_notes, claude_feedback, plan_adjustments, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date_str, user_recap, strava_activity_id, perceived_effort,
-              pain_notes, claude_feedback, adj_json, now))
+                (date, recovery_score, pre_workout_notes, user_recap, exercises,
+                 perceived_effort, post_notes, claude_feedback, plan_adjustments, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date_str, recovery_score, pre_workout_notes, user_recap,
+              exercises_json, perceived_effort, post_notes,
+              claude_feedback, adj_json, now))
         return cursor.lastrowid
 
 
 def get_workout_logs(days: int = 7) -> list[dict]:
-    from datetime import date, timedelta
     cutoff = (date.today() - timedelta(days=days)).isoformat()
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM workout_log WHERE date >= ? ORDER BY date DESC",
             (cutoff,)
         ).fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            if d.get("exercises"):
+                try:
+                    d["exercises"] = json.loads(d["exercises"])
+                except Exception:
+                    pass
+            result.append(d)
+        return result

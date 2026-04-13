@@ -1,12 +1,11 @@
-/* ── Goggins Fitness Agent — App JS ─────────────────────────────────────── */
+/* ── Goggins Fitness Agent — App JS (v2, no OAuth) ──────────────────────── */
 
 // ── State ──────────────────────────────────────────────────────────────────
 const state = {
   tab: 'today',
   chatHistory: [],
-  authStatus: { whoop: false, strava: false },
   todayData: null,
-  plan: null,
+  showLogForm: false,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -20,14 +19,6 @@ function showToast(msg, duration = 2500) {
   setTimeout(() => t.classList.remove('show'), duration);
 }
 
-function scoreColor(score) {
-  if (score === null || score === undefined) return '';
-  if (score >= 67) return 'score-green';
-  if (score >= 34) return 'score-yellow';
-  if (score >= 20) return 'score-orange';
-  return 'score-red';
-}
-
 function intensityClass(intensity) {
   return `intensity-${(intensity || 'moderate').toLowerCase()}`;
 }
@@ -37,24 +28,23 @@ function dotColor(intensity) {
   return map[(intensity || 'moderate').toLowerCase()] || '#555';
 }
 
-function fmtDate(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Simple markdown-ish to HTML (bold, bullets)
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function renderMarkdown(text) {
   if (!text) return '';
   return text
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>');
 }
@@ -70,104 +60,242 @@ function switchTab(tab) {
   if (tab === 'settings') loadSettings();
 }
 
-// ── Auth Status ────────────────────────────────────────────────────────────
-async function fetchAuthStatus() {
-  try {
-    const res = await fetch('/auth/status');
-    state.authStatus = await res.json();
-  } catch (e) { /* offline */ }
-}
-
 // ── TODAY SCREEN ───────────────────────────────────────────────────────────
 async function loadToday() {
   const screen = qs('#screen-today');
-  screen.innerHTML = '<div class="loading">Loading your data...</div>';
-
+  screen.innerHTML = '<div class="loading">Loading...</div>';
   try {
     const res = await fetch('/today');
     const data = await res.json();
     state.todayData = data;
     renderToday(data);
   } catch (e) {
-    screen.innerHTML = `<div class="empty-state"><div class="big-icon">⚡</div><p>Couldn't load data. Check your connection.</p></div>`;
+    screen.innerHTML = `<div class="empty-state"><p>Couldn't load. Check your connection.</p></div>`;
   }
 }
 
 function renderToday(data) {
-  const recovery = data.recovery || {};
-  const sleep = data.sleep || {};
   const workout = data.scheduled_workout || {};
-  const score = recovery.score;
-  const intensity = data.recommended_intensity;
+  const hasWorkout = !workout.error;
 
-  let workoutHTML = '';
-  if (workout.error) {
-    workoutHTML = `
-      <div class="card" id="today-workout-card">
-        <div class="card-title">Today's Mission</div>
-        <div class="empty-state" style="padding:16px 0">
-          <p>No plan set yet. Go to Settings to set your goals, then generate your plan.</p>
-          <br>
-          <button class="btn btn-primary btn-sm" onclick="switchTab('settings')">Set Goals</button>
-        </div>
-      </div>`;
-  } else {
-    workoutHTML = `
-      <div class="card" id="today-workout-card">
-        <div class="card-title">Today's Mission</div>
-        <span class="workout-intensity ${intensityClass(intensity || workout.intensity)}">${(intensity || workout.intensity || 'moderate').toUpperCase()}</span>
-        <div class="workout-description">${workout.description || 'Rest Day'}</div>
-        <div class="workout-meta">
-          ${workout.distance_km ? `${workout.distance_km} km · ` : ''}${workout.duration_min ? `${workout.duration_min} min` : ''}
-          ${data.intensity_rationale ? `<br><em style="color:var(--text2)">${data.intensity_rationale}</em>` : ''}
-        </div>
-        <button class="btn btn-primary" onclick="openLogWorkout()">Log Workout</button>
-      </div>`;
-  }
+  const workoutCard = hasWorkout ? `
+    <div class="card" id="today-workout-card">
+      <div class="card-title">Today's Mission</div>
+      <span class="workout-intensity ${intensityClass(workout.intensity)}">${(workout.intensity || 'moderate').toUpperCase()}</span>
+      <div class="workout-description">${escapeHtml(workout.description || 'Rest Day')}</div>
+      <div class="workout-meta">
+        ${workout.target_distance_km ? `${workout.target_distance_km} km · ` : ''}${workout.target_duration_min ? `${workout.target_duration_min} min` : ''}
+      </div>
+    </div>` : `
+    <div class="card">
+      <div class="card-title">Today's Mission</div>
+      <div class="empty-state" style="padding:12px 0">
+        <p>No plan yet. Set your goals in Settings to get started.</p>
+        <br>
+        <button class="btn btn-primary btn-sm" onclick="switchTab('settings')">Set Goals</button>
+      </div>
+    </div>`;
 
-  let recoveryHTML = '';
-  if (recovery.error) {
-    recoveryHTML = `
-      <div class="card" id="recovery-card">
-        <div class="card-title">Recovery</div>
-        <div style="color:var(--text2);font-size:14px">
-          ${recovery.error === 'not_connected'
-            ? 'Connect Whoop in <a href="#" onclick="switchTab(\'settings\')" style="color:var(--accent)">Settings</a> to see your recovery data.'
-            : 'No recovery data yet today.'}
+  const checkinCard = `
+    <div class="card" id="checkin-card">
+      <div class="card-title">Pre-Workout Check-In</div>
+      <p class="checkin-hint">Enter your Whoop recovery score before you start.</p>
+      <div class="checkin-row">
+        <div class="checkin-field">
+          <label for="recovery-input">Recovery Score</label>
+          <input type="number" id="recovery-input" min="0" max="100" placeholder="0–100">
         </div>
-      </div>`;
-  } else {
-    recoveryHTML = `
-      <div class="card" id="recovery-card">
-        <div class="card-title">Recovery Score</div>
-        <div class="recovery-score ${scoreColor(score)}">${score !== null && score !== undefined ? Math.round(score) : '—'}</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${fmtDate(recovery.date) || 'Today'}</div>
-        <div class="recovery-stats">
-          <div class="stat-box">
-            <div class="stat-val">${recovery.hrv_rmssd ? Math.round(recovery.hrv_rmssd) : '—'}</div>
-            <div class="stat-lbl">HRV ms</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-val">${recovery.resting_hr ? Math.round(recovery.resting_hr) : '—'}</div>
-            <div class="stat-lbl">RHR bpm</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-val">${sleep.hours !== null && sleep.hours !== undefined ? sleep.hours : '—'}</div>
-            <div class="stat-lbl">Sleep hrs</div>
-          </div>
-        </div>
-      </div>`;
-  }
+      </div>
+      <label for="pain-input" style="margin-top:10px">Pain / Notes (optional)</label>
+      <input type="text" id="pain-input" placeholder="e.g. left knee sore, feeling tired">
+      <button class="btn btn-primary" id="checkin-btn" onclick="submitCheckin()">Check In with Goggins</button>
+      <div id="checkin-response" class="checkin-response" style="display:none"></div>
+    </div>`;
 
-  qs('#screen-today').innerHTML = recoveryHTML + workoutHTML;
+  const logBtn = `
+    <button class="btn btn-secondary" onclick="showLogForm()" style="margin-bottom:4px">
+      Log Completed Workout
+    </button>`;
+
+  const logFormHTML = `
+    <div class="card" id="log-form-card" style="display:none">
+      <div class="card-title">Log Workout</div>
+
+      <label>What did you do?</label>
+      <textarea id="log-recap" rows="3" placeholder="e.g. Ran 8km easy pace, felt good throughout"></textarea>
+
+      <div id="exercises-list"></div>
+      <button class="btn btn-secondary btn-sm" onclick="addExerciseRow()" style="margin-bottom:12px">+ Add Exercise</button>
+
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label>Perceived Effort (1–10)</label>
+          <input type="number" id="log-effort" min="1" max="10" placeholder="7">
+        </div>
+        <div style="flex:1">
+          <label>Recovery Score</label>
+          <input type="number" id="log-recovery" min="0" max="100" placeholder="65">
+        </div>
+      </div>
+
+      <label>How did you feel after?</label>
+      <input type="text" id="log-post-notes" placeholder="e.g. legs heavy, lungs felt great">
+
+      <button class="btn btn-primary" onclick="submitLog()">Submit to Goggins</button>
+      <div id="log-response" class="checkin-response" style="display:none"></div>
+    </div>`;
+
+  qs('#screen-today').innerHTML = workoutCard + checkinCard + logBtn + logFormHTML;
 }
 
-// ── LOG WORKOUT MODAL ──────────────────────────────────────────────────────
-function openLogWorkout() {
-  // Pre-fill chat with log workout prompt
-  switchTab('chat');
-  qs('#chat-input').value = "I just finished my workout. Here's how it went: ";
-  qs('#chat-input').focus();
+function showLogForm() {
+  const card = qs('#log-form-card');
+  if (card) {
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// ── Exercise rows ──────────────────────────────────────────────────────────
+function addExerciseRow() {
+  const list = qs('#exercises-list');
+  if (!list) return;
+  const idx = list.children.length;
+  const row = document.createElement('div');
+  row.className = 'exercise-row';
+  row.innerHTML = `
+    <input type="text"   class="ex-name"   placeholder="Exercise name" style="flex:2">
+    <input type="number" class="ex-sets"   placeholder="Sets"   min="1" style="flex:1">
+    <input type="number" class="ex-reps"   placeholder="Reps"   min="1" style="flex:1">
+    <input type="number" class="ex-weight" placeholder="lbs"    min="0" step="2.5" style="flex:1">
+    <button class="btn btn-sm" style="width:36px;padding:0;background:var(--bg3);color:var(--red);border:1px solid var(--border)"
+      onclick="this.parentElement.remove()">✕</button>`;
+  list.appendChild(row);
+}
+
+function collectExercises() {
+  const rows = qsa('.exercise-row');
+  const exercises = [];
+  for (const row of rows) {
+    const name = row.querySelector('.ex-name').value.trim();
+    if (!name) continue;
+    const ex = { name };
+    const sets = parseInt(row.querySelector('.ex-sets').value);
+    const reps = parseInt(row.querySelector('.ex-reps').value);
+    const weight = parseFloat(row.querySelector('.ex-weight').value);
+    if (!isNaN(sets)) ex.sets = sets;
+    if (!isNaN(reps)) ex.reps = reps;
+    if (!isNaN(weight)) ex.weight_lbs = weight;
+    exercises.push(ex);
+  }
+  return exercises;
+}
+
+// ── Pre-workout check-in ───────────────────────────────────────────────────
+async function submitCheckin() {
+  const scoreEl = qs('#recovery-input');
+  const notesEl = qs('#pain-input');
+  const score = parseInt(scoreEl.value);
+
+  if (isNaN(score) || score < 0 || score > 100) {
+    showToast('Enter a valid recovery score (0–100)');
+    return;
+  }
+
+  const btn = qs('#checkin-btn');
+  const responseEl = qs('#checkin-response');
+  btn.disabled = true;
+  btn.textContent = 'Goggins is reading your data...';
+  responseEl.style.display = 'none';
+  responseEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recovery_score: score, notes: notesEl.value.trim() }),
+    });
+
+    responseEl.style.display = 'block';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const j = JSON.parse(payload);
+          if (j.text) { text += j.text; responseEl.innerHTML = renderMarkdown(text); }
+          if (j.error) responseEl.textContent = `Error: ${j.error}`;
+        } catch (_) {}
+      }
+    }
+
+    // Add to chat history so it's accessible there too
+    state.chatHistory.push(
+      { role: 'user', content: `Recovery check-in: ${score}/100. Notes: ${notesEl.value || 'None'}` },
+      { role: 'assistant', content: text }
+    );
+
+  } catch (e) {
+    responseEl.style.display = 'block';
+    responseEl.textContent = 'Something went wrong. Try again.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Check In with Goggins';
+}
+
+// ── Post-workout log ───────────────────────────────────────────────────────
+async function submitLog() {
+  const recap = qs('#log-recap')?.value.trim();
+  if (!recap) { showToast('Describe what you did first.'); return; }
+
+  const exercises = collectExercises();
+  const effort = parseInt(qs('#log-effort')?.value) || null;
+  const recovery = parseInt(qs('#log-recovery')?.value) || null;
+  const postNotes = qs('#log-post-notes')?.value.trim() || '';
+
+  const responseEl = qs('#log-response');
+  responseEl.style.display = 'block';
+  responseEl.innerHTML = '<em style="color:var(--text2)">Goggins is reviewing your session...</em>';
+
+  const btn = qs('#log-form-card .btn-primary');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_recap: recap,
+        exercises,
+        perceived_effort: effort,
+        recovery_score: recovery,
+        post_notes: postNotes,
+      }),
+    });
+    const data = await res.json();
+    responseEl.innerHTML = renderMarkdown(data.feedback || 'Logged.');
+
+    // Add to chat history
+    state.chatHistory.push(
+      { role: 'user', content: `Post-workout log: ${recap}` },
+      { role: 'assistant', content: data.feedback || '' }
+    );
+
+    showToast('Workout logged!');
+  } catch (e) {
+    responseEl.innerHTML = 'Error saving log. Try again.';
+  }
+
+  if (btn) btn.disabled = false;
 }
 
 // ── PLAN SCREEN ────────────────────────────────────────────────────────────
@@ -183,16 +311,12 @@ async function loadPlan() {
       screen.innerHTML = `
         <div class="empty-state">
           <div class="big-icon">📋</div>
-          <p>No training plan yet.</p>
-          <br>
+          <p>No training plan yet.</p><br>
           <button class="btn btn-primary" onclick="generatePlan()">Generate My Plan</button>
-          <br><br>
-          <p style="font-size:13px">Set your goals in Settings first.</p>
+          <br><br><p style="font-size:13px">Set your goals in Settings first.</p>
         </div>`;
       return;
     }
-
-    state.plan = data;
     renderPlan(data);
   } catch (e) {
     screen.innerHTML = `<div class="empty-state"><p>Couldn't load plan.</p></div>`;
@@ -204,13 +328,14 @@ function renderPlan(data) {
   const weeks = data.weeks || {};
   let html = `<button class="btn btn-secondary" style="margin-bottom:16px" onclick="generatePlan()">↻ Regenerate Plan</button>`;
 
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   for (const [weekNum, days] of Object.entries(weeks)) {
     html += `<div class="week-header">Week ${weekNum}</div>`;
     for (const day of days) {
       const isToday = day.date === today;
-      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       const dayName = dayNames[(day.day || 1) - 1] || '';
-      const dateShort = day.date ? day.date.slice(5) : ''; // MM-DD
+      const dateShort = day.date ? day.date.slice(5) : '';
 
       html += `
         <div class="plan-day ${day.completed ? 'completed' : ''} ${isToday ? 'today' : ''}">
@@ -219,7 +344,7 @@ function renderPlan(data) {
             <div>${dateShort}</div>
           </div>
           <div class="plan-day-body">
-            <div class="plan-day-desc">${day.description || 'Rest'}</div>
+            <div class="plan-day-desc">${escapeHtml(day.description || 'Rest')}</div>
             <div class="plan-day-meta">
               ${day.distance_km ? `${day.distance_km}km · ` : ''}${day.duration_min ? `${day.duration_min}min · ` : ''}${(day.intensity || '').toUpperCase()}
             </div>
@@ -233,26 +358,26 @@ function renderPlan(data) {
 }
 
 async function generatePlan() {
-  showToast('Goggins is building your plan...', 5000);
+  showToast('Goggins is building your plan...', 6000);
   try {
     const res = await fetch('/plan/generate', { method: 'POST' });
     const data = await res.json();
     if (data.message) {
       showToast('Plan generated!');
       loadPlan();
-      // Show coaching message in chat
       state.chatHistory.push({ role: 'assistant', content: data.message });
       renderChatHistory();
-      switchTab('chat');
     }
   } catch (e) {
-    showToast('Error generating plan. Make sure your profile is set.');
+    showToast('Error generating plan. Set your profile in Settings first.');
   }
 }
 
 // ── CHAT SCREEN ────────────────────────────────────────────────────────────
 function renderChatHistory() {
   const container = qs('#chat-messages');
+  if (!container) return;
+
   if (state.chatHistory.length === 0) {
     container.innerHTML = `
       <div class="msg msg-agent">
@@ -260,6 +385,7 @@ function renderChatHistory() {
       </div>`;
     return;
   }
+
   container.innerHTML = state.chatHistory
     .filter(m => m.role !== 'system')
     .map(m => `<div class="msg msg-${m.role === 'user' ? 'user' : 'agent'}">${
@@ -267,10 +393,6 @@ function renderChatHistory() {
     }</div>`)
     .join('');
   container.scrollTop = container.scrollHeight;
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 async function sendChat() {
@@ -284,7 +406,6 @@ async function sendChat() {
   state.chatHistory.push({ role: 'user', content: msg });
   renderChatHistory();
 
-  // Show typing indicator
   const container = qs('#chat-messages');
   const typingEl = document.createElement('div');
   typingEl.className = 'msg msg-typing';
@@ -300,18 +421,16 @@ async function sendChat() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: msg,
-        history: state.chatHistory.slice(0, -1), // exclude the just-added user msg
+        history: state.chatHistory.slice(0, -1),
       }),
     });
 
     typingEl.remove();
 
-    // Read SSE stream
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let agentMsg = '';
 
-    // Add agent message bubble
     const agentEl = document.createElement('div');
     agentEl.className = 'msg msg-agent';
     container.appendChild(agentEl);
@@ -319,31 +438,20 @@ async function sendChat() {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
+      for (const line of chunk.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const payload = line.slice(6).trim();
         if (payload === '[DONE]') break;
-
         try {
-          const json = JSON.parse(payload);
-          if (json.text) {
-            agentMsg += json.text;
-            agentEl.innerHTML = renderMarkdown(agentMsg);
-            container.scrollTop = container.scrollHeight;
-          }
-          if (json.error) {
-            agentEl.textContent = `Error: ${json.error}`;
-          }
-        } catch (_) { /* ignore parse errors */ }
+          const j = JSON.parse(payload);
+          if (j.text) { agentMsg += j.text; agentEl.innerHTML = renderMarkdown(agentMsg); container.scrollTop = container.scrollHeight; }
+          if (j.error) agentEl.textContent = `Error: ${j.error}`;
+        } catch (_) {}
       }
     }
 
     state.chatHistory.push({ role: 'assistant', content: agentMsg });
-
   } catch (e) {
     typingEl.remove();
     const errEl = document.createElement('div');
@@ -358,9 +466,6 @@ async function sendChat() {
 
 // ── SETTINGS SCREEN ────────────────────────────────────────────────────────
 async function loadSettings() {
-  await fetchAuthStatus();
-  const { whoop, strava } = state.authStatus;
-
   let profile = {};
   try {
     const res = await fetch('/profile');
@@ -368,51 +473,18 @@ async function loadSettings() {
     if (!data.error) profile = data;
   } catch (_) {}
 
-  const screen = qs('#screen-settings');
-  screen.innerHTML = `
+  qs('#screen-settings').innerHTML = `
     <div class="settings-section">
-      <span class="settings-label">Connected Accounts</span>
-
-      <div class="connect-row">
-        <div>
-          <div class="connect-name">Whoop</div>
-          <div class="connect-status ${whoop ? 'status-connected' : 'status-disconnected'}">
-            <span class="status-dot"></span>${whoop ? 'Connected' : 'Not connected'}
-          </div>
-        </div>
-        <a href="/auth/whoop/start" class="btn btn-sm ${whoop ? 'btn-secondary' : 'btn-primary'}">
-          ${whoop ? 'Reconnect' : 'Connect'}
-        </a>
-      </div>
-
-      <div class="connect-row">
-        <div>
-          <div class="connect-name">Strava</div>
-          <div class="connect-status ${strava ? 'status-connected' : 'status-disconnected'}">
-            <span class="status-dot"></span>${strava ? 'Connected' : 'Not connected'}
-          </div>
-        </div>
-        <a href="/auth/strava/start" class="btn btn-sm ${strava ? 'btn-secondary' : 'btn-primary'}">
-          ${strava ? 'Reconnect' : 'Connect'}
-        </a>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <span class="settings-label">Your Goals</span>
+      <span class="settings-label">Your Goals & Profile</span>
       <form id="profile-form">
         <label>Primary Goal</label>
         <input type="text" id="f-goals" placeholder="e.g. Run a marathon under 4 hours by July" value="${escapeHtml(profile.goals || '')}">
 
+        <label>Current Fitness Level</label>
+        <textarea id="f-fitness" rows="2" placeholder="e.g. Run 3x/week doing 5km, no strength training, played college soccer">${escapeHtml(profile.current_fitness || '')}</textarea>
+
         <label>Timeline (weeks)</label>
         <input type="number" id="f-timeline" min="4" max="52" value="${profile.timeline_weeks || 12}">
-
-        <label>Fitness Level</label>
-        <select id="f-level">
-          <option value="beginner"     ${profile.fitness_level === 'beginner'     ? 'selected' : ''}>Beginner</option>
-          <option value="intermediate" ${profile.fitness_level === 'intermediate' ? 'selected' : ''}>Intermediate</option>
-          <option value="advanced"     ${profile.fitness_level === 'advanced'     ? 'selected' : ''}>Advanced</option>
-        </select>
 
         <label>Days Available per Week</label>
         <input type="number" id="f-days" min="2" max="7" value="${profile.days_per_week || 5}">
@@ -421,7 +493,7 @@ async function loadSettings() {
         <input type="text" id="f-sports" placeholder="e.g. running, cycling, strength" value="${escapeHtml((profile.preferred_sports || []).join(', '))}">
 
         <label>Injuries / Restrictions</label>
-        <input type="text" id="f-restrictions" placeholder="e.g. left knee pain" value="${escapeHtml(profile.restrictions || '')}">
+        <input type="text" id="f-restrictions" placeholder="e.g. left knee pain, no overhead pressing" value="${escapeHtml(profile.restrictions || '')}">
 
         <button type="submit" class="btn btn-primary">Save & Generate Plan</button>
       </form>
@@ -431,14 +503,15 @@ async function loadSettings() {
     e.preventDefault();
     const body = {
       goals: qs('#f-goals').value.trim(),
+      current_fitness: qs('#f-fitness').value.trim(),
       timeline_weeks: parseInt(qs('#f-timeline').value) || 12,
-      fitness_level: qs('#f-level').value,
       days_per_week: parseInt(qs('#f-days').value) || 5,
       preferred_sports: qs('#f-sports').value.split(',').map(s => s.trim()).filter(Boolean),
       restrictions: qs('#f-restrictions').value.trim(),
     };
 
-    if (!body.goals) { showToast('Please enter your goal.'); return; }
+    if (!body.goals) { showToast('Enter your goal first.'); return; }
+    if (!body.current_fitness) { showToast('Describe your current fitness level.'); return; }
 
     try {
       await fetch('/profile', {
@@ -446,8 +519,7 @@ async function loadSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      showToast('Profile saved!');
-      // Kick off plan generation
+      showToast('Saved! Building your plan...');
       await generatePlan();
     } catch (e) {
       showToast('Error saving profile.');
@@ -456,21 +528,15 @@ async function loadSettings() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  // Tab buttons
+document.addEventListener('DOMContentLoaded', () => {
   qsa('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  // Chat send button
   qs('#chat-send').addEventListener('click', sendChat);
 
-  // Chat input — send on Enter (not Shift+Enter), auto-resize
   qs('#chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChat();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
   });
 
   qs('#chat-input').addEventListener('input', function () {
@@ -478,15 +544,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     this.style.height = Math.min(this.scrollHeight, 120) + 'px';
   });
 
-  // Handle OAuth redirect query param
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('connected')) {
-    showToast(`${params.get('connected').charAt(0).toUpperCase() + params.get('connected').slice(1)} connected!`);
-    window.history.replaceState({}, '', '/');
-  }
-
-  // Initial render
   renderChatHistory();
-  await fetchAuthStatus();
   switchTab('today');
 });
